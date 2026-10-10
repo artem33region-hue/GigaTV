@@ -51,7 +51,7 @@ fun HomeScreen(
     val playlists by container.playlists.playlists.collectAsState()
     val errors by container.playlists.errors.collectAsState()
     val activeCatalog by container.catalog.active.collectAsState()
-    val continueWatching by container.history.inProgress.collectAsState(initial = emptyList())
+    val continueWatching by container.history.continueWatching.collectAsState(initial = emptyList())
     val favorites by container.favorites.favorites.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
@@ -115,14 +115,16 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         contentPadding = PaddingValues(horizontal = EDGE)
                     ) {
-                        items(continueWatching, key = { it.url }) { w ->
+                        items(continueWatching, key = { it.key }) { card ->
+                            val w = card.item
                             MovieCard(
-                                title = w.title,
+                                title = card.title,
                                 posterUrl = w.poster,
-                                subtitle = "${(w.progress * 100).toInt()}%",
+                                subtitle = listOfNotNull(card.episode,
+                                    "${(w.progress * 100).toInt()}%").joinToString(" · "),
                                 progress = w.progress,
                                 onLongClick = {
-                                    scope.launch { container.history.remove(w.url) }
+                                    scope.launch { container.history.removeFromContinueWatching(card.key) }
                                 },
                                 onClick = { onResume(w.url, w.title, w.poster) }
                             )

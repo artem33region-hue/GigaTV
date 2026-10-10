@@ -48,6 +48,18 @@ class WatchHistoryRepository(private val context: Context) {
             .sortedByDescending { it.updatedAt }
     }
 
+    internal val continueWatching: Flow<List<ContinueWatchingCard>> = context.historyStore.data.map { prefs ->
+        continueWatchingCards(decode(prefs[itemsKey]))
+    }
+
+    internal suspend fun removeFromContinueWatching(key: String) {
+        context.historyStore.edit { prefs ->
+            prefs[itemsKey] = json.encodeToString(decode(prefs[itemsKey]).filterNot {
+                it.continueWatchingCard().key == key
+            })
+        }
+    }
+
     suspend fun positionFor(url: String): Long =
         inProgress.first().firstOrNull { it.url == url }?.position ?: 0L
 
