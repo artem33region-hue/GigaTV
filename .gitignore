@@ -1,0 +1,26 @@
+# Machine-specific files, credentials and signing keys
+**/local.properties
+**/.gradle/
+**/.kotlin/
+**/build/
+**/.idea/
+**/*.iml
+**/.externalNativeBuild/
+**/.cxx/
+**/captures/
+*.apk
+*.idsig
+*.keystore
+*.jks
+*.p12
+*.pem
+.env
+.env.*
+.aws/
+.codex/
+.agents/
+release-output/
+signing/
+.tools/
+**/__pycache__/
+

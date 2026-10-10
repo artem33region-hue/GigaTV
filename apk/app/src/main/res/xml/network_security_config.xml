@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- User-configured TorrServe servers, playlists and streams may use HTTP.
+     Catalog endpoints use HTTPS; UpdateRepository requires HTTPS and rejects
+     cross-protocol redirects independently of this policy. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
