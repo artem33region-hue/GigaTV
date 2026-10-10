@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -29,6 +31,7 @@ fun FavoritesScreen(
 ) {
     val container = LocalContext.current.appContainer()
     val favorites by container.favorites.favorites.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
@@ -37,6 +40,9 @@ fun FavoritesScreen(
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         Text("Избранное", style = MaterialTheme.typography.headlineMedium)
+        if (favorites.isNotEmpty()) {
+            Text("ОК — открыть · Удерживайте ОК — удалить из избранного", color = TextMuted)
+        }
 
         if (favorites.isEmpty()) {
             Text(
@@ -56,6 +62,7 @@ fun FavoritesScreen(
                 MovieCard(
                     title = fav.title,
                     posterUrl = fav.poster,
+                    onLongClick = { scope.launch { container.favorites.remove(fav.key) } },
                     subtitle = listOfNotNull(
                         fav.year.takeIf { it.isNotBlank() },
                         if (fav.series) "сериал" else null

@@ -29,6 +29,7 @@ import androidx.tv.material3.Text
 import com.artem.gigatv.appContainer
 import com.artem.gigatv.data.catalog.CatalogMovie
 import com.artem.gigatv.data.catalog.CatalogRepository
+import com.artem.gigatv.data.favorites.FavoriteItem
 import com.artem.gigatv.data.playlist.PlaylistItem
 import com.artem.gigatv.ui.components.AppButton
 import com.artem.gigatv.ui.components.MovieCard
@@ -43,13 +44,15 @@ private val EDGE = 48.dp
 fun HomeScreen(
     onOpenMovie: (CatalogMovie) -> Unit,
     onOpenLocal: (PlaylistItem) -> Unit,
-    onResume: (url: String, title: String, poster: String?) -> Unit
+    onResume: (url: String, title: String, poster: String?) -> Unit,
+    onOpenFavorites: () -> Unit
 ) {
     val container = LocalContext.current.appContainer()
     val playlists by container.playlists.playlists.collectAsState()
     val errors by container.playlists.errors.collectAsState()
     val activeCatalog by container.catalog.active.collectAsState()
     val continueWatching by container.history.inProgress.collectAsState(initial = emptyList())
+    val favorites by container.favorites.favorites.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
 
     var catalogRows by remember { mutableStateOf<List<Pair<String, List<CatalogMovie>>>>(emptyList()) }
@@ -86,6 +89,7 @@ fun HomeScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Spacer(Modifier.weight(1f))
+                AppButton(onClick = onOpenFavorites) { Text("★ Избранное (${favorites.size})") }
                 AppButton(onClick = {
                     refreshTick++
                     scope.launch { container.playlists.refresh() }
@@ -121,6 +125,38 @@ fun HomeScreen(
                                     scope.launch { container.history.remove(w.url) }
                                 },
                                 onClick = { onResume(w.url, w.title, w.poster) }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (favorites.isNotEmpty()) {
+            item(key = "favorites") {
+                Column {
+                    RowTitle("Избранное", Modifier.padding(start = EDGE))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        contentPadding = PaddingValues(horizontal = EDGE)
+                    ) {
+                        items(favorites, key = { it.key }) { favorite ->
+                            MovieCard(
+                                title = favorite.title,
+                                posterUrl = favorite.poster,
+                                subtitle = favorite.year.ifBlank { null },
+                                onClick = {
+                                    if (favorite.source == FavoriteItem.SOURCE_LOCAL) {
+                                        favorite.url?.let { url ->
+                                            onOpenLocal(PlaylistItem(title = favorite.title, url = url,
+                                                poster = favorite.poster, year = favorite.year.toIntOrNull(),
+                                                description = favorite.description, isSeries = favorite.series))
+                                        }
+                                    } else {
+                                        onOpenMovie(CatalogMovie(id = favorite.id, source = favorite.source,
+                                            title = favorite.title, isSeries = favorite.series))
+                                    }
+                                }
                             )
                         }
                     }

@@ -375,7 +375,8 @@ fun AppNav(
                 HomeScreen(
                     onOpenMovie = { m: CatalogMovie -> nav.openMovie(m.source, m.id, m.isSeries) },
                     onOpenLocal = { item -> nav.openLocal(item) },
-                    onResume = { url, title, poster -> nav.openPlayer(url, title, poster) }
+                    onResume = { url, title, poster -> nav.openPlayer(url, title, poster) },
+                    onOpenFavorites = { goTo("favorites") }
                 )
             }
             composable("search?q={q}") { entry ->

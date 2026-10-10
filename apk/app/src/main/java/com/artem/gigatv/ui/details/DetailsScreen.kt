@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -263,7 +264,10 @@ private fun DetailsContent(
 
                 // Все действия одним рядом: навигация влево-вправо, без перехода
                 // вниз между Row и отдельной кнопкой, который срабатывал не всегда.
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                ) {
                     if (playItem != null) {
                         AppButton(onClick = { onPlay(playItem) }) { Text("▶  Смотреть") }
                         if (ExternalPlayer.isAvailable(context)) {

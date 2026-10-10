@@ -48,6 +48,15 @@ class FavoritesRepository(private val context: Context) {
         } ?: emptyList()
     }
 
+    suspend fun remove(key: String) {
+        context.favoritesStore.edit { prefs ->
+            val current = prefs[itemsKey]?.let { raw ->
+                runCatching { json.decodeFromString<List<FavoriteItem>>(raw) }.getOrNull()
+            } ?: emptyList()
+            prefs[itemsKey] = json.encodeToString(current.filterNot { it.key == key })
+        }
+    }
+
     suspend fun toggle(item: FavoriteItem) {
         context.favoritesStore.edit { prefs ->
             val current = prefs[itemsKey]?.let { raw ->
