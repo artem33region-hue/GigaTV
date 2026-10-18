@@ -91,6 +91,7 @@ fun MovieCard(
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
+    var posterLoaded by remember(posterUrl) { mutableStateOf(false) }
     Card(
         scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         onClick = onClick,
@@ -104,21 +105,24 @@ fun MovieCard(
                     .height(210.dp)
                     .background(CardDark)
             ) {
-                if (posterUrl != null) {
-                    AsyncImage(
-                        model = posterUrl,
-                        contentDescription = title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+                if (!posterLoaded) {
                     Text(
                         text = title,
                         textAlign = TextAlign.Center,
                         color = TextMuted,
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(8.dp)
+                        maxLines = 5,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.align(Alignment.Center).padding(12.dp)
+                    )
+                }
+                if (!posterUrl.isNullOrBlank()) {
+                    AsyncImage(
+                        model = posterUrl,
+                        contentDescription = title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                        onSuccess = { posterLoaded = true },
+                        onError = { posterLoaded = false }
                     )
                 }
                 if (progress != null) {

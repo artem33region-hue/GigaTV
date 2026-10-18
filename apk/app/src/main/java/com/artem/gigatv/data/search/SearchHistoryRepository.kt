@@ -21,13 +21,15 @@ class SearchHistoryRepository(private val context: Context) {
     private val json = Json { ignoreUnknownKeys = true }
 
     private companion object {
-        const val MAX_ITEMS = 20
+        const val MAX_ITEMS = 10
         // Столько же требует поиск, чтобы вообще начать искать.
         const val MIN_LENGTH = 2
     }
 
     private fun decode(raw: String?): List<String> =
-        raw?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrNull() } ?: emptyList()
+        (raw?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrNull() } ?: emptyList())
+            .map { it.trim() }.filter { it.length >= MIN_LENGTH }
+            .distinctBy { it.lowercase() }.take(MAX_ITEMS)
 
     val queries: Flow<List<String>> = context.searchHistoryStore.data.map { decode(it[queriesKey]) }
 

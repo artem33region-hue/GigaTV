@@ -286,6 +286,8 @@ fun AppNav(
     val currentEntryFocus = remember { FocusRequester() }
     val contentFocus = remember { FocusRequester() }
     var contentHasFocus by remember { mutableStateOf(false) }
+    var focusTransfer by remember { mutableStateOf(false) }
+    var menuSelection by remember { mutableStateOf(0) }
 
     // При возврате на верхний уровень (например, из плеера) фокус по умолчанию
     // падает на первый фокусируемый элемент — полосу меню, и она раскрывается
@@ -294,20 +296,24 @@ fun AppNav(
     // серия попыток — но меню принудительно закрываем лишь один раз и выходим,
     // как только фокус дошёл до контента или пользователь сам открыл меню:
     // иначе цикл ~600 мс отбирал ввод и захлопывал меню до четырёх раз.
-    LaunchedEffect(route) {
+    LaunchedEffect(route, menuSelection) {
         if (topLevel) {
             drawerState.setValue(DrawerValue.Closed)
             repeat(5) {
-                if (contentHasFocus || drawerState.currentValue == DrawerValue.Open) {
+                if (contentHasFocus && it > 0 || !focusTransfer && drawerState.currentValue == DrawerValue.Open) {
+                    focusTransfer = false
                     return@LaunchedEffect
                 }
                 runCatching { contentFocus.requestFocus() }
                 kotlinx.coroutines.delay(120)
             }
+            focusTransfer = false
         }
     }
 
     fun goTo(dest: String) {
+        focusTransfer = true
+        menuSelection++
         drawerState.setValue(DrawerValue.Closed)
         if (route == dest) return
         nav.navigate(dest) {
@@ -329,7 +335,7 @@ fun AppNav(
                 // перекомпонует весь NavHost вместе с рядами постеров, и анимация
                 // проседает до ~117 мс на кадр вместо 8 мс.
                 LaunchedEffect(drawerValue, route) {
-                    if (drawerValue == DrawerValue.Open) {
+                    if (drawerValue == DrawerValue.Open && !focusTransfer) {
                         runCatching { currentEntryFocus.requestFocus() }
                     }
                 }

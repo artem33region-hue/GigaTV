@@ -1,9 +1,9 @@
 package com.artem.gigatv.ui.search
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -24,6 +24,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.tv.material3.MaterialTheme
@@ -67,6 +72,9 @@ fun SearchScreen(
      */
     var historyVisible by rememberSaveable(initialQuery) { mutableStateOf(initialQuery.isBlank()) }
     val fieldFocus = remember { FocusRequester() }
+    val clearHistoryFocus = remember { FocusRequester() }
+    val historyFocus = remember(history) { history.associateWith { FocusRequester() } }
+    var consumeLongPressRelease by remember { mutableStateOf(false) }
 
     val localResults = remember(query, playlists) { container.playlists.search(query) }
 
@@ -107,126 +115,143 @@ fun SearchScreen(
         }
     }
 
-    LazyColumn(
-        verticalArrangement = Arrangement.spacedBy(24.dp),
-        contentPadding = PaddingValues(horizontal = 48.dp, vertical = 28.dp),
-        modifier = Modifier.fillMaxSize()
-    ) {
-        item(key = "input") {
-            Column {
-                Text(
-                    "Поиск",
-                    style = MaterialTheme.typography.headlineMedium,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                AppTextField(
-                    value = query,
-                    onValueChange = {
-                        query = it
-                        // Набирают вручную — история уступает место результатам,
-                        // а на очищенном поле возвращается.
-                        historyVisible = it.isBlank()
-                    },
-                    placeholder = "Название фильма…",
-                    modifier = Modifier
-                        .fillMaxWidth(0.6f)
-                        .focusRequester(fieldFocus),
-                    onDone = { keepQuery() }
-                )
-            }
-        }
-
-        // Пока ничего не ищем — на пустом месте показываем прошлые запросы.
-        if (history.isNotEmpty() && historyVisible) {
-            item(key = "history") {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    RowTitle("Недавние запросы")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(history, key = { it }) { past ->
-                            AppButton(
-                                onClick = { query = past },
-                                onLongClick = {
-                                    scope.launch { container.searchHistory.remove(past) }
-                                    // Нажатая кнопка исчезает — уводим фокус в поле,
-                                    // иначе он достаётся меню и то распахивается.
-                                    runCatching { fieldFocus.requestFocus() }
-                                }
-                            ) { Text(past) }
-                        }
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AppButton(onClick = {
-                            scope.launch { container.searchHistory.clear() }
-                            // Блок сейчас исчезнет вместе с этой кнопкой —
-                            // фокус уводим сами, иначе его перехватит меню.
-                            runCatching { fieldFocus.requestFocus() }
-                        }) { Text("Очистить историю") }
-                        Text("Долгое нажатие на запросе — убрать только его", color = TextMuted)
-                    }
-                }
-            }
-        }
-
-        if (localResults.isNotEmpty()) {
-            item(key = "local") {
+    Box(Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+        val confirm = event.key == Key.DirectionCenter || event.key == Key.Enter || event.key == Key.NumPadEnter
+        if (confirm && consumeLongPressRelease) {
+            if (event.type == KeyEventType.KeyUp) consumeLongPressRelease = false
+            true
+        } else false
+    }) {
+        LazyColumn(
+            verticalArrangement = Arrangement.spacedBy(24.dp),
+            contentPadding = PaddingValues(start = 48.dp, end = 48.dp, top = 28.dp, bottom = 76.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            item(key = "input") {
                 Column {
-                    RowTitle("В моей медиатеке")
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        items(localResults) { entry ->
-                            MovieCard(
-                                title = entry.title,
-                                posterUrl = entry.poster,
-                                subtitle = entry.year?.toString(),
-                                onClick = {
-                                    keepQuery()
-                                    onOpenLocal(entry)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (catalogResults.isNotEmpty()) {
-            item(key = "catalog") {
-                Column {
-                    RowTitle(
-                        if (activeCatalog == CatalogRepository.SRC_CINEMETA) "В каталоге Cinemeta"
-                        else "В каталоге TMDB"
+                    Text(
+                        "Поиск",
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        items(catalogResults, key = { "${it.source}-${it.isSeries}-${it.id}" }) { movie ->
-                            MovieCard(
-                                title = movie.title,
-                                posterUrl = movie.poster,
-                                subtitle = movie.subtitle,
-                                onClick = {
-                                    keepQuery()
-                                    onOpenMovie(movie)
-                                }
-                            )
+                    AppTextField(
+                        value = query,
+                        onValueChange = {
+                            query = it
+                            // Набирают вручную — история уступает место результатам,
+                            // а на очищенном поле возвращается.
+                            historyVisible = it.isBlank()
+                        },
+                        placeholder = "Название фильма…",
+                        modifier = Modifier
+                            .fillMaxWidth(0.6f)
+                            .focusRequester(fieldFocus)
+                            .onPreviewKeyEvent { event ->
+                                if (historyVisible && event.type == KeyEventType.KeyDown && event.key == Key.DirectionDown) {
+                                    (history.firstOrNull()?.let { historyFocus[it] } ?: clearHistoryFocus).requestFocus()
+                                    true
+                                } else false
+                            },
+                        onDone = { keepQuery() }
+                    )
+                }
+            }
+
+            // Пока ничего не ищем — на пустом месте показываем прошлые запросы.
+            if (historyVisible) {
+                item(key = "history") {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        RowTitle("Недавние запросы")
+                        if (history.isEmpty()) Text("История поиска пуста", color = TextMuted)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(history, key = { it }) { past ->
+                                AppButton(
+                                    modifier = Modifier.focusRequester(historyFocus.getValue(past)),
+                                    onClick = { query = past },
+                                    onLongClick = {
+                                        consumeLongPressRelease = true
+                                        val index = history.indexOf(past)
+                                        val next = history.getOrNull(index + 1) ?: history.getOrNull(index - 1)
+                                        // Keep focus among history actions, never in the search field.
+                                        runCatching {
+                                            (next?.let { historyFocus[it] } ?: clearHistoryFocus).requestFocus()
+                                        }
+                                        scope.launch { container.searchHistory.remove(past) }
+                                    }
+                                ) { Text(past) }
+                            }
+                        }
+                        AppButton(modifier = Modifier.focusRequester(clearHistoryFocus), onClick = {
+                            scope.launch { container.searchHistory.clear() }
+                        }) { Text("Очистить историю") }
+                    }
+                }
+            }
+
+            if (localResults.isNotEmpty()) {
+                item(key = "local") {
+                    Column {
+                        RowTitle("В моей медиатеке")
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            items(localResults) { entry ->
+                                MovieCard(
+                                    title = entry.title,
+                                    posterUrl = entry.poster,
+                                    subtitle = entry.year?.toString(),
+                                    onClick = {
+                                        keepQuery()
+                                        onOpenLocal(entry)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        item(key = "status") {
-            when {
-                searching -> Text("Ищем…", color = TextMuted)
-                searchError != null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(searchError.orEmpty(), color = TextMuted)
-                    AppButton(onClick = { retry++ }) { Text("Повторить") }
+            if (catalogResults.isNotEmpty()) {
+                item(key = "catalog") {
+                    Column {
+                        RowTitle(
+                            if (activeCatalog == CatalogRepository.SRC_CINEMETA) "В каталоге Cinemeta"
+                            else "В каталоге TMDB"
+                        )
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                            items(catalogResults, key = { "${it.source}-${it.isSeries}-${it.id}" }) { movie ->
+                                MovieCard(
+                                    title = movie.title,
+                                    posterUrl = movie.poster,
+                                    subtitle = movie.subtitle,
+                                    onClick = {
+                                        keepQuery()
+                                        onOpenMovie(movie)
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
-                query.trim().length >= 2 && localResults.isEmpty() && catalogResults.isEmpty() ->
-                    Text("Ничего не найдено.", color = TextMuted)
-                activeCatalog == CatalogRepository.NONE ->
-                    Text("Поиск по вашей медиатеке работает всегда.", color = TextMuted)
             }
+
+            item(key = "status") {
+                when {
+                    searching -> Text("Ищем…", color = TextMuted)
+                    searchError != null -> Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(searchError.orEmpty(), color = TextMuted)
+                        AppButton(onClick = { retry++ }) { Text("Повторить") }
+                    }
+                    query.trim().length >= 2 && localResults.isEmpty() && catalogResults.isEmpty() ->
+                        Text("Ничего не найдено.", color = TextMuted)
+                    activeCatalog == CatalogRepository.NONE ->
+                        Text("Поиск по вашей медиатеке работает всегда.", color = TextMuted)
+                }
+            }
+        }
+        if (historyVisible) {
+            Text("Долгое нажатие на запросе — удалить его из истории · Последние 10 запросов",
+                color = TextMuted,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 48.dp, vertical = 20.dp))
         }
     }
 }
