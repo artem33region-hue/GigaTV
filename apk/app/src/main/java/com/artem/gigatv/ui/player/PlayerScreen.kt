@@ -268,12 +268,30 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                         text = "← Назад"
                         setOnClickListener { onBack() }
                     }
+                    val header = android.widget.LinearLayout(ctx).apply {
+                        orientation = android.widget.LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        val inset = (16 * resources.displayMetrics.density).toInt()
+                        setPadding(inset, inset / 2, inset, inset / 2)
+                        setBackgroundColor(android.graphics.Color.argb(190, 0, 0, 0))
+                        addView(backButton)
+                        addView(android.widget.TextView(ctx).apply {
+                            text = title
+                            textSize = 20f
+                            setTextColor(android.graphics.Color.WHITE)
+                            maxLines = 3
+                            ellipsize = android.text.TextUtils.TruncateAt.END
+                            setPadding(inset, 0, 0, 0)
+                            isFocusable = false
+                        }, android.widget.LinearLayout.LayoutParams(0,
+                            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    }
                     findViewById<androidx.media3.ui.PlayerControlView>(androidx.media3.ui.R.id.exo_controller)
-                        ?.addView(backButton, FrameLayout.LayoutParams(
-                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                        ?.addView(header, FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.MATCH_PARENT,
                             FrameLayout.LayoutParams.WRAP_CONTENT,
                             Gravity.TOP or Gravity.START
-                        ).apply { setMargins(24, 16, 0, 0) })
+                        ))
                     // Стрелки на полосе прогресса по умолчанию мотают на 1/20
                     // длительности (~7 минут для двухчасового фильма) — ставим
                     // фиксированные 10 секунд.

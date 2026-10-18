@@ -5,6 +5,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class VideoFilesTest {
+    @Test fun playerTitleUsesCatalogNameAndEpisodeNumbers() {
+        assertEquals("Game of Thrones — Сезон 2 Серия 9",
+            playbackTitle("Game of Thrones", TorrFile(path = "GOT.S02E09.BDRip.1080p.mkv")))
+        assertEquals("Фильм", playbackTitle("Фильм", TorrFile(path = "movie.1080p.mkv")))
+        assertEquals("movie.mkv", playbackTitle("", TorrFile(path = "movie.mkv")))
+    }
     @Test fun detectsEpisodeNamesAndSeasonFolders() {
         assertEquals(2 to 10, episodeInfo(TorrFile(path = "Show.S02E10.mkv")))
         assertEquals(3 to 7, episodeInfo(TorrFile(path = "Show.3x07.avi")))

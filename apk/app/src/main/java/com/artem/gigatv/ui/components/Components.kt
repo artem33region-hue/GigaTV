@@ -74,6 +74,7 @@ fun AppButton(
         onClick = onClick,
         onLongClick = onLongClick,
         enabled = enabled,
+        scale = androidx.tv.material3.ButtonDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         modifier = if (enabled) modifier.tapClick(onClick) else modifier,
         content = content
     )
@@ -91,6 +92,7 @@ fun MovieCard(
     onClick: () -> Unit
 ) {
     Card(
+        scale = androidx.tv.material3.CardDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         onClick = onClick,
         onLongClick = { onLongClick?.invoke() },
         modifier = modifier.width(150.dp).tapClick(onClick)

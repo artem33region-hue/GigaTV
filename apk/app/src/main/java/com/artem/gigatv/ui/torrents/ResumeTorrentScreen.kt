@@ -52,7 +52,8 @@ fun ResumeTorrentScreen(request: PlayRequest, onBack: () -> Unit, onPlay: (PlayR
             if (videos.isEmpty()) Text("В раздаче нет видеофайлов.")
             else VideoFileBrowser(videos, current.hash, onPlay = { file ->
                 scope.launch {
-                    onPlay(PlayRequest(container.torrserve.streamUrl(current.hash, file), file.fileName, request.poster))
+                    onPlay(PlayRequest(container.torrserve.streamUrl(current.hash, file),
+                        playbackTitle(context.torrentSearch(current, request.poster).title, file), request.poster))
                 }
             }, modifier = Modifier.weight(1f),
                 initialFileId = Uri.parse(request.url).getQueryParameter("index")?.toIntOrNull())

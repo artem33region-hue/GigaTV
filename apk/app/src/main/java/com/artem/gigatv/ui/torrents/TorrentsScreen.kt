@@ -205,7 +205,7 @@ fun TorrentsScreen(onPlay: (url: String, title: String) -> Unit) {
             }
             item(key = "video-browser") {
                 VideoFileBrowser(videoFiles, t.hash, onPlay = { file ->
-                    scope.launch { onPlay(container.torrserve.streamUrl(t.hash, file), file.fileName) }
+                    scope.launch { onPlay(container.torrserve.streamUrl(t.hash, file), playbackTitle(t.displayName, file)) }
                 }, modifier = Modifier.fillMaxWidth().height(480.dp))
             }
         }

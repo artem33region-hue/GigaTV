@@ -18,6 +18,7 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.serialization.json.Json
 import com.artem.gigatv.ui.torrents.VideoFileBrowser
+import com.artem.gigatv.ui.torrents.playbackTitle
 import com.artem.gigatv.ui.torrents.saveTorrentSearch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -100,7 +101,7 @@ fun ReleasesScreen(spec: TorrentSearchSpec, onPlay: (PlaylistItem) -> Unit) {
             val url = container.torrserve.streamUrl(torrent.hash, file)
             onPlay(
                 PlaylistItem(
-                    title = file.fileName.ifBlank { spec.title },
+                    title = playbackTitle(spec.title, file),
                     url = url,
                     poster = spec.poster
                 )
@@ -175,7 +176,7 @@ fun ReleasesScreen(spec: TorrentSearchSpec, onPlay: (PlaylistItem) -> Unit) {
                 onPlay = { play(chosen.first, it) },
                 onExternal = if (hasExternal) { file ->
                     scope.launch {
-                        ExternalPlayer.open(context, container.torrserve.streamUrl(chosen.first.hash, file), file.fileName)
+                        ExternalPlayer.open(context, container.torrserve.streamUrl(chosen.first.hash, file), playbackTitle(spec.title, file))
                     }
                     Unit
                 } else null,

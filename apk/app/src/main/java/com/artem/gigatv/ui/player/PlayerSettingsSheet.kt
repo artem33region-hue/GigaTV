@@ -297,6 +297,7 @@ private fun MenuItem(
     onClick: () -> Unit,
 ) {
     ListItem(
+        scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         selected = false,
         onClick = onClick,
         headlineContent = { Text(title) },
@@ -314,6 +315,7 @@ private fun OptionItem(
     onClick: () -> Unit,
 ) {
     ListItem(
+        scale = androidx.tv.material3.ListItemDefaults.scale(focusedScale = 1f, pressedScale = 1f),
         selected = false,
         onClick = onClick,
         headlineContent = { Text(title) },

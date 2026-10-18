@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ContinueWatchingTest {
+    @Test fun readablePlayerTitlesKeepSeriesGroupedWithExistingHistory() {
+        val cards = continueWatchingCards(listOf(
+            episode("Game.of.Thrones.S02E08.mkv", 1),
+            episode("Game of Thrones — Сезон 2 Серия 9", 2)))
+        assertEquals(1, cards.size)
+        assertEquals("Game of Thrones", cards.single().title)
+        assertEquals("Сезон 2 · Серия 9", cards.single().episode)
+    }
     private fun episode(title: String, time: Long, finished: Boolean = false) =
         WatchItem("https://tv/$time", title, position = 20_000, duration = 100_000,
             updatedAt = time, finished = finished)

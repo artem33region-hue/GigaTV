@@ -15,7 +15,7 @@ internal fun WatchItem.continueWatchingCard(): ContinueWatchingCard {
     val match = episodeMarker.find(title)
         ?: return ContinueWatchingCard(this, "url:$url", title, null)
     val numbers = match.groupValues.drop(1).filter { it.isNotEmpty() }.map { it.toInt() }
-    val name = title.substring(0, match.range.first).replace(Regex("[._]+"), " ").trim()
+    val name = title.substring(0, match.range.first).replace(Regex("[._]+"), " ").trim().trimEnd('—', '-').trimEnd()
     // An episode number alone does not identify a show; do not merge unrelated files.
     if (name.isBlank()) return ContinueWatchingCard(this, "url:$url", title,
         "Сезон ${numbers[0]} · Серия ${numbers[1]}")
