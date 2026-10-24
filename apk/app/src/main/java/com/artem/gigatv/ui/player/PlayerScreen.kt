@@ -49,7 +49,6 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.session.MediaSession
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.DefaultTimeBar
-import androidx.media3.ui.TimeBar
 import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import com.artem.gigatv.APP_USER_AGENT
@@ -68,19 +67,7 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
     var showSettings by remember { mutableStateOf(false) }
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
-    var buffering by remember { mutableStateOf(false) }
-    var bufferSeconds by remember { mutableStateOf(0) }
-    var scrubPosition by remember { mutableStateOf<Long?>(null) }
-    var seekPosition by remember { mutableStateOf<Long?>(null) }
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
-    var controllerVisible by remember { mutableStateOf(true) }
-    LaunchedEffect(buffering) {
-        bufferSeconds = 0
-        while (buffering) {
-            delay(1000)
-            bufferSeconds++
-        }
-    }
     LaunchedEffect(showSettings, playerView) {
         if (!showSettings) playerView?.requestFocus()
     }
@@ -140,24 +127,11 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                         .build()
                 )
                 addListener(object : Player.Listener {
-                    override fun onPlaybackStateChanged(playbackState: Int) {
-                        buffering = playbackState == Player.STATE_BUFFERING
-                        if (playbackState == Player.STATE_READY || playbackState == Player.STATE_ENDED) {
-                            seekPosition = null
-                        }
-                    }
-
                     override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo,
                         newPosition: Player.PositionInfo, reason: Int) {
                         if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                            seekPosition = newPosition.positionMs
-                            bufferSeconds = 0
                             container.diag.note("перемотка на ${newPosition.positionMs / 1000} с")
                         }
-                    }
-
-                    override fun onEvents(player: Player, events: Player.Events) {
-                        if (player.playbackState == Player.STATE_READY) seekPosition = null
                     }
 
                     override fun onPlayerError(e: PlaybackException) {
@@ -296,7 +270,6 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                     findViewById<android.view.View>(androidx.media3.ui.R.id.exo_audio_track)
                         ?.setOnClickListener { showSettings = true }
                     setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-                        controllerVisible = visibility == android.view.View.VISIBLE
                         if (visibility != android.view.View.VISIBLE && !showSettings) {
                             post { if (!showSettings) requestFocus() }
                         }
@@ -335,20 +308,7 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                     // длительности (~7 минут для двухчасового фильма) — ставим
                     // фиксированные 10 секунд.
                     findViewById<DefaultTimeBar>(androidx.media3.ui.R.id.exo_progress)
-                        ?.apply {
-                            setKeyTimeIncrement(10_000)
-                            addListener(object : TimeBar.OnScrubListener {
-                                override fun onScrubStart(timeBar: TimeBar, position: Long) {
-                                    scrubPosition = position
-                                }
-                                override fun onScrubMove(timeBar: TimeBar, position: Long) {
-                                    scrubPosition = position
-                                }
-                                override fun onScrubStop(timeBar: TimeBar, position: Long, canceled: Boolean) {
-                                    scrubPosition = null
-                                }
-                            })
-                        }
+                        ?.setKeyTimeIncrement(10_000)
                     keepScreenOn = true
                     isFocusable = true
                     isFocusableInTouchMode = true
@@ -368,25 +328,6 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
             },
             modifier = Modifier.fillMaxSize()
         )
-
-        if (error == null && !showSettings && (scrubPosition != null || buffering)) {
-            val preview = scrubPosition
-            val target = seekPosition
-            val message = when {
-                preview != null -> "Перемотка: ${playbackTime(preview)} · Отпустите стрелку или нажмите ОК"
-                target != null -> "Переход к ${playbackTime(target)} · Подгрузка видео… ${bufferSeconds} с"
-                else -> "Подгрузка видео… ${bufferSeconds} с"
-            } + if (buffering && bufferSeconds >= 10) "\nОжидаем данные от источника" else ""
-            Text(message, color = Color.White,
-                modifier = Modifier.align(Alignment.BottomCenter)
-                    .padding(bottom = 120.dp)
-                    .background(Color(0xCC000000)).padding(16.dp))
-        }
-        if (controllerVisible && !showSettings && error == null && !buffering && scrubPosition == null) {
-            Text("На шкале времени: ← / → — по 10 с · ОК — перейти", color = Color.White,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
-                    .background(Color(0x99000000)).padding(8.dp))
-        }
 
         if (showSettings) {
             PlayerSettingsSheet(
@@ -409,10 +350,4 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
             )
         }
     }
-}
-
-private fun playbackTime(positionMs: Long): String {
-    val seconds = (positionMs / 1000).coerceAtLeast(0)
-    return if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, seconds / 60 % 60, seconds % 60)
-    else "%02d:%02d".format(seconds / 60, seconds % 60)
 }

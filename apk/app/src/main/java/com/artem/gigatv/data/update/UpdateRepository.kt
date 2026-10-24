@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.content.FileProvider
 import com.artem.gigatv.BuildConfig
 import com.artem.gigatv.data.SettingsRepository
+import com.artem.gigatv.data.net.awaitParsed
 import java.io.File
 import java.security.MessageDigest
 import java.security.DigestOutputStream
@@ -91,10 +92,7 @@ class UpdateRepository(
         if (url.isEmpty()) return@withContext Result.success(null)
         runCatching {
             val manifestUrl = requireHttps(url, "адрес обновления")
-            val body = client.newCall(Request.Builder().url(manifestUrl).build()).execute().use { r ->
-                if (!r.isSuccessful) error("HTTP ${r.code}")
-                r.body?.string().orEmpty()
-            }
+            val body = client.newCall(Request.Builder().url(manifestUrl).build()).readUpdateManifest()
             if (!body.trimStart().startsWith("{")) error("по адресу лежит не JSON")
             val info = json.decodeFromString(UpdateInfo.serializer(), body)
             if (info.versionCode <= BuildConfig.VERSION_CODE || info.url.isBlank()) return@runCatching null
@@ -102,7 +100,7 @@ class UpdateRepository(
             // — проверяем его до того, как покажем пользователю кнопку.
             requireHttps(info.url, "адрес APK")
             info
-        }
+        }.onFailure { if (it is CancellationException) throw it }
     }
 
     /** Скачивает APK, проверяет его и передаёт системному установщику. */
@@ -120,7 +118,7 @@ class UpdateRepository(
                 apk = target
                 val apkUrl = requireHttps(info.url, "адрес APK")
                 val digest = MessageDigest.getInstance("SHA-256")
-                val size = client.newCall(Request.Builder().url(apkUrl).build()).execute().use { r ->
+                val size = client.newCall(Request.Builder().url(apkUrl).build()).awaitParsed { r ->
                     if (!r.isSuccessful) error("HTTP ${r.code}")
                     val body = r.body ?: error("пустой ответ")
                     if (body.contentLength() > MAX_APK_BYTES) error("файл подозрительно велик")
@@ -163,9 +161,7 @@ class UpdateRepository(
             error("в APK другое приложение (${archive.packageName})")
         }
         val archiveVersion = archive.versionCodeCompat()
-        if (archiveVersion <= BuildConfig.VERSION_CODE) {
-            error("в APK версия $archiveVersion, не новее установленной")
-        }
+        validateUpdateVersion(archiveVersion, BuildConfig.VERSION_CODE.toLong(), info.versionCode.toLong())
 
         val ours = signaturesOf(pm.getPackageInfo(context.packageName, signatureFlags()))
         val theirs = signaturesOf(archive)

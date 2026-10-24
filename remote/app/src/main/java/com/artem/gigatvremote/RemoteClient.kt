@@ -21,6 +21,13 @@ import okhttp3.WebSocketListener
 const val TV_PORT = 8765
 const val SERVICE_TYPE = "_gigatv._tcp."
 
+/** A TV must not forward its phone's bearer token to a different redirect target. */
+internal fun remoteHttpClient(): OkHttpClient = OkHttpClient.Builder()
+    .pingInterval(3, TimeUnit.SECONDS)
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .build()
+
 /**
  * WebSocket-клиент к серверу пульта в GigaTV: держит соединение,
  * переподключается сам и отдаёт последнее состояние плеера во Flow.
@@ -28,9 +35,7 @@ const val SERVICE_TYPE = "_gigatv._tcp."
 class RemoteClient(private val scope: CoroutineScope, private val token: String) {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val ok = OkHttpClient.Builder()
-        .pingInterval(3, TimeUnit.SECONDS)
-        .build()
+    private val ok = remoteHttpClient()
 
     val state = MutableStateFlow<RemoteState?>(null)
     val status = MutableStateFlow("Поиск телевизора…")
