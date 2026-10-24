@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
@@ -235,6 +236,25 @@ fun AppNav(
 ) {
     val nav = rememberNavController()
     val context = LocalContext.current
+    val access = context.appContainer().remote.access
+    val pairing by access.pending.collectAsState()
+    pairing?.let { request ->
+        LaunchedEffect(request) {
+            kotlinx.coroutines.delay(60_000)
+            access.resolve(request, false)
+        }
+        DisposableEffect(request) {
+            val dialog = android.app.AlertDialog.Builder(context)
+                .setTitle("Подключить телефонный пульт?")
+                .setMessage("Устройство ${request.host} запрашивает управление телевизором. Разрешите, если вы сейчас подключаете свой телефон.")
+                .setPositiveButton("Разрешить") { _, _ -> access.resolve(request, true) }
+                .setNegativeButton("Отклонить") { _, _ -> access.resolve(request, false) }
+                .setOnCancelListener { access.resolve(request, false) }
+                .create()
+            dialog.show()
+            onDispose { dialog.dismiss() }
+        }
+    }
     val updateScope = rememberCoroutineScope()
     var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
     LaunchedEffect(Unit) {

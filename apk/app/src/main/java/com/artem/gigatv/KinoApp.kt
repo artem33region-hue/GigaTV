@@ -17,6 +17,7 @@ import com.artem.gigatv.data.history.WatchHistoryRepository
 import com.artem.gigatv.data.jacred.JacredRepository
 import com.artem.gigatv.data.playlist.PlaylistRepository
 import com.artem.gigatv.data.remote.RemoteControlServer
+import com.artem.gigatv.data.remote.RemoteAccess
 import com.artem.gigatv.data.remote.registerRemoteService
 import com.artem.gigatv.data.remote.RemoteDiscoveryResponder
 import com.artem.gigatv.data.search.SearchHistoryRepository
@@ -89,12 +90,19 @@ class AppContainer(context: Context) {
     val diag = Diagnostics(context)
 
     /** Сервер для приложения-пульта на телефоне. */
-    val remote = RemoteControlServer()
+    private val remotePrefs = context.getSharedPreferences("remote_access", Context.MODE_PRIVATE)
+    val remote = RemoteControlServer(RemoteAccess(
+        initial = remotePrefs.getStringSet("approved", emptySet()).orEmpty().toSet(),
+        persist = { remotePrefs.edit().putStringSet("approved", it).apply() }
+    ))
     private val remoteDiscovery = RemoteDiscoveryResponder()
 
     init {
         diag.note("запуск ${BuildConfig.VERSION_NAME}")
         diag.startWatchdog()
+        appScope.launch {
+            runCatching { updates.cleanCache() }.onFailure { diag.note("не удалось очистить кэш обновлений") }
+        }
         // Пульт не критичен: занятый порт или странная прошивка не должны
         // ронять приложение. Конечный read-таймаут в паре с ping'ами сервера
         // хоронит соединения пропавших телефонов (см. RemoteControlServer).

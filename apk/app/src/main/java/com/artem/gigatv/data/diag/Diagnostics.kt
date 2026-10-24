@@ -12,6 +12,8 @@ import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ThreadPoolExecutor
 
 /**
  * Журнал редких, но важных событий: подвисания главного потока и ошибки плеера.
@@ -46,7 +48,10 @@ class Diagnostics(private val context: Context) {
 
     private val main = Handler(Looper.getMainLooper())
     private val stamp = SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
-    private val lock = Any()
+    private val writer = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+        ArrayBlockingQueue<Runnable>(64),
+        { task -> Thread(task, "gigatv-log-writer").apply { isDaemon = true } },
+        ThreadPoolExecutor.DiscardOldestPolicy())
 
     private val file: File? by lazy {
         // Внешняя папка может быть недоступна — тогда журнала просто не будет,
@@ -60,8 +65,8 @@ class Diagnostics(private val context: Context) {
 
     fun note(event: String) {
         Log.i(TAG, event)
-        val target = file ?: return
-        synchronized(lock) {
+        writer.execute {
+            val target = file ?: return@execute
             runCatching {
                 if (target.length() > MAX_BYTES) target.delete()
                 target.appendText("${stamp.format(Date())}  $event\n")

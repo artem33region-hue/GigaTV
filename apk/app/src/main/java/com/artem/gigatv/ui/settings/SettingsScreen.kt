@@ -220,6 +220,15 @@ fun SettingsScreen() {
             }
         }
 
+        item(key = "remote-access") {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Телефонный пульт", style = MaterialTheme.typography.titleLarge)
+                Text("Новый телефон подключается после подтверждения на телевизоре.", color = TextMuted)
+                AppButton(onClick = { container.remote.revokeAll() }) {
+                    Text("Отключить все телефонные пульты")
+                }
+            }
+        }
         item(key = "about") {
             Text(
                 "GigaTV ${BuildConfig.VERSION_NAME}",

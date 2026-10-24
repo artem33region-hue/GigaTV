@@ -4,6 +4,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ContinueWatchingTest {
+    @Test fun brieflyOpenedEpisodeDoesNotHidePreviousProgress() {
+        val previous = episode("Show.S01E01.mkv", 1)
+        val accidental = episode("Show.S01E02.mkv", 2).copy(position = 1_000)
+        assertEquals(previous.url, continueWatchingCards(listOf(previous, accidental)).single().item.url)
+    }
     @Test fun readablePlayerTitlesKeepSeriesGroupedWithExistingHistory() {
         val cards = continueWatchingCards(listOf(
             episode("Game.of.Thrones.S02E08.mkv", 1),

@@ -26,6 +26,7 @@ internal fun WatchItem.continueWatchingCard(): ContinueWatchingCard {
 /** Group before filtering: finishing the latest episode must not revive older episodes. */
 internal fun continueWatchingCards(items: List<WatchItem>): List<ContinueWatchingCard> =
     items.sortedByDescending { it.updatedAt }
+        .filter { it.finished || it.position >= 5_000 }
         .map { it.continueWatchingCard() }
         .distinctBy { it.key }
         .filter { !it.item.finished && it.item.position >= 5_000 && it.item.progress < 0.95f }

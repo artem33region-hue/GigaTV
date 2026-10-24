@@ -32,6 +32,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -53,8 +56,13 @@ class MainActivity : ComponentActivity() {
 fun RemoteApp() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val client = remember { RemoteClient(scope) }
-    DisposableEffect(Unit) { onDispose { client.close() } }
+    val client = remember {
+        val prefs = context.getSharedPreferences("remote_identity", android.content.Context.MODE_PRIVATE)
+        val token = prefs.getString("token", null) ?: ByteArray(32).also {
+            java.security.SecureRandom().nextBytes(it)
+        }.joinToString("") { "%02x".format(it) }.also { prefs.edit().putString("token", it).apply() }
+        RemoteClient(scope, token)
+    }
 
     val state by client.state.collectAsState()
     val status by client.status.collectAsState()
@@ -63,18 +71,43 @@ fun RemoteApp() {
     var connectedTo by remember { mutableStateOf<String?>(null) }
     var manual by remember { mutableStateOf("") }
     var autoConnect by remember { mutableStateOf(true) }
+    var foreground by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-    DisposableEffect(Unit) {
-        val discovery = TvDiscovery(context) { name, host ->
-            devices = (devices + (name to host)).distinctBy { it.second }
+    DisposableEffect(lifecycleOwner, client) {
+        var discovery: TvDiscovery? = null
+        fun start() {
+            if (discovery != null) return
+            foreground = true
+            connectedTo?.let { client.connect(it) }
+            discovery = TvDiscovery(context) { name, host ->
+                devices = (devices + (name to host)).distinctBy { it.second }
+            }.also { it.start() }
         }
-        discovery.start()
-        onDispose { discovery.stop() }
+        fun stop() {
+            foreground = false
+            discovery?.stop()
+            discovery = null
+            client.close()
+        }
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> start()
+                Lifecycle.Event.ON_STOP -> stop()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) start()
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            stop()
+        }
     }
 
     // Нашли телевизор — подключаемся сами, без лишних нажатий.
-    LaunchedEffect(devices) {
-        if (autoConnect && connectedTo == null && devices.isNotEmpty()) {
+    LaunchedEffect(devices, foreground) {
+        if (foreground && autoConnect && connectedTo == null && devices.isNotEmpty()) {
             autoConnect = false
             val host = devices.first().second
             if (client.connect(host)) connectedTo = host

@@ -18,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
@@ -70,6 +71,10 @@ class UpdateRepository(
     private val json = Json { ignoreUnknownKeys = true }
     private val downloadMutex = Mutex()
 
+    suspend fun cleanCache() = withContext(Dispatchers.IO) {
+        downloadMutex.withLock { pruneUpdateCache(File(context.cacheDir, "updates")) }
+    }
+
     /**
      * Обновление приходит из сети и попадает прямо в установщик, поэтому канал
      * должен быть защищён от подмены на всём пути: и манифест, и сам APK.
@@ -110,6 +115,7 @@ class UpdateRepository(
             val jobContext = currentCoroutineContext()
             runCatching {
                 val dir = File(context.cacheDir, "updates").apply { mkdirs() }
+                pruneUpdateCache(dir)
                 val target = File.createTempFile("gigatv-${info.versionCode}-", ".apk", dir)
                 apk = target
                 val apkUrl = requireHttps(info.url, "адрес APK")

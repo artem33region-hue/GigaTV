@@ -3,7 +3,6 @@ package com.artem.gigatv.data.remote
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
-import android.util.Patterns
 import android.os.SystemClock
 import java.util.concurrent.atomic.AtomicBoolean
 import fi.iki.elonen.NanoHTTPD
@@ -15,20 +14,15 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ThreadPoolExecutor
 import java.util.concurrent.TimeUnit
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 /**
  * WebSocket-сервер для приложения-пульта на телефоне.
  *
- * Слушает [PORT] на всех интерфейсах: телевизор и телефон в одной домашней
- * сети, пароля нет сознательно. Состояние плеера рассылается всем подключённым
- * пультам; команды пересылаются в активный [RemoteSession]. Обычный GET отдаёт
- * последнее состояние — удобно для отладки из браузера.
- *
- * «Без пароля» означает «для всех в этой сети», но не «для всех в интернете»:
- * запросы, пришедшие из чужой веб-страницы, отсекаются в [serve]. Иначе
- * открытая в браузере страница управляла бы плеером и читала, что смотрят.
+ * HTTP-состояние и WebSocket-команды доступны только с токеном телефона,
+ * подтверждённого на телевизоре. Запросы из браузера дополнительно отклоняются.
  */
-class RemoteControlServer : NanoWSD(PORT) {
+class RemoteControlServer(val access: RemoteAccess, port: Int = PORT) : NanoWSD(port) {
 
     companion object {
         const val PORT = 8765
@@ -79,6 +73,11 @@ class RemoteControlServer : NanoWSD(PORT) {
         clients.forEach { it.enqueue(state) }
     }
 
+    fun revokeAll() {
+        access.revokeAll()
+        clients.forEach { it.abort() }
+    }
+
     /**
      * Единственная проверка «свой — чужой» на входе, до рукопожатия.
      *
@@ -99,6 +98,12 @@ class RemoteControlServer : NanoWSD(PORT) {
         !isNumericHost(session.headers["host"]) ->
             forbidden("host not allowed")
 
+        !access.authorized(session.headers["x-gigatv-token"]) -> {
+            if (session.headers["upgrade"].equals("websocket", ignoreCase = true)) {
+                access.request(session.headers["x-gigatv-token"], session.remoteIpAddress)
+            }
+            newFixedLengthResponse(Response.Status.UNAUTHORIZED, "text/plain", "TV approval required")
+        }
         else -> super.serve(session)
     }
 
@@ -107,17 +112,13 @@ class RemoteControlServer : NanoWSD(PORT) {
 
     /** Заголовок Host без порта; отсутствующий Host считаем допустимым. */
     private fun isNumericHost(header: String?): Boolean {
-        val raw = header?.trim()?.takeIf { it.isNotEmpty() } ?: return true
-        val host = when {
-            raw.startsWith("[") -> raw.drop(1).substringBefore(']')  // [::1]:8765
-            raw.count { it == ':' } > 1 -> raw                       // голый IPv6
-            else -> raw.substringBeforeLast(':')
-        }
-        // Двоеточий в доменном имени быть не может, так что литерал IPv6
-        // распознаётся по ним же.
+        val raw = header?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+        val host = "http://$raw".toHttpUrlOrNull()?.host ?: return false
         return host.equals("localhost", ignoreCase = true) ||
             host.contains(':') ||
-            Patterns.IP_ADDRESS.matcher(host).matches()
+            (host.split('.').size == 4 && host.split('.').all { part ->
+                part.isNotEmpty() && part.all { it.isDigit() } && part.toIntOrNull() in 0..255
+            })
     }
 
     override fun stop() {
@@ -140,7 +141,10 @@ class RemoteControlServer : NanoWSD(PORT) {
         private val terminated = AtomicBoolean(false)
         @Volatile private var sendStartedAt = 0L
 
-        fun enqueue(state: String) = submit { send(state) }
+        fun enqueue(state: String) {
+            if (access.authorized(handshake.headers["x-gigatv-token"])) submit { send(state) }
+            else abort()
+        }
 
         fun enqueuePing() {
             val started = sendStartedAt
@@ -189,7 +193,11 @@ class RemoteControlServer : NanoWSD(PORT) {
         }
 
         override fun onMessage(message: WebSocketFrame) {
-            message.textPayload?.let { playerSession?.handle(it) }
+            if (!access.authorized(handshake.headers["x-gigatv-token"])) {
+                abort()
+                return
+            }
+            message.textPayload?.takeIf { it.length <= 4096 }?.let { playerSession?.handle(it) }
         }
 
         override fun onPong(pong: WebSocketFrame?) {}

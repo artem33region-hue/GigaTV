@@ -19,6 +19,16 @@ cd apk
 Build `remote/` the same way. Build outputs are under each project's
 `app/build/outputs/apk/` directory.
 
+## Phone remote pairing
+
+TV version 0.4.12 and later requires Remote version 0.1.4 or later. Update both
+applications before using the phone remote. On first connection, approve the
+phone on the television. The approval survives app restarts; TV Settings can
+disconnect and forget all approved remotes. HTTP state and WebSocket commands
+both require the approved phone token. Tokens travel over the local network
+without TLS; use a trusted LAN. Discovery and the remote connection stop when
+the phone app moves to the background and resume when it returns.
+
 ## Updates on the television
 
 GigaTV checks for updates when it starts. When a newer version is available,

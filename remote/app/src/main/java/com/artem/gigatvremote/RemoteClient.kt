@@ -25,7 +25,7 @@ const val SERVICE_TYPE = "_gigatv._tcp."
  * WebSocket-клиент к серверу пульта в GigaTV: держит соединение,
  * переподключается сам и отдаёт последнее состояние плеера во Flow.
  */
-class RemoteClient(private val scope: CoroutineScope) {
+class RemoteClient(private val scope: CoroutineScope, private val token: String) {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val ok = OkHttpClient.Builder()
@@ -61,7 +61,7 @@ class RemoteClient(private val scope: CoroutineScope) {
     private fun open() {
         val host = target ?: return
         status.value = "Подключение к $host…"
-        val request = Request.Builder().url(remoteAddress(host)).build()
+        val request = Request.Builder().url(remoteAddress(host)).header("X-GigaTV-Token", token).build()
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 synchronized(lock) {
@@ -82,7 +82,8 @@ class RemoteClient(private val scope: CoroutineScope) {
                 synchronized(lock) {
                     if (webSocket !== ws) return
                     state.value = null
-                    status.value = "Нет связи, переподключение…"
+                    status.value = if (response?.code == 401) "Подтвердите подключение на телевизоре"
+                        else "Нет связи, переподключение…"
                     retry()
                 }
             }

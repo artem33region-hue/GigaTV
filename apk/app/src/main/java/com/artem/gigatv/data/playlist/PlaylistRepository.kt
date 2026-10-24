@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -17,9 +18,12 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 
-class PlaylistRepository(private val settings: SettingsRepository) {
-
-    private val client = OkHttpClient()
+class PlaylistRepository(
+    private val urls: Flow<List<String>>,
+    private val client: OkHttpClient = OkHttpClient()
+) {
+    constructor(settings: SettingsRepository) : this(settings.playlistUrls)
+    private val lastSuccessful = mutableMapOf<String, Playlist>()
     private val json = Json { ignoreUnknownKeys = true }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshMutex = Mutex()
@@ -44,7 +48,9 @@ class PlaylistRepository(private val settings: SettingsRepository) {
         try {
             val result = mutableListOf<Playlist>()
             val problems = mutableListOf<String>()
-            for (url in settings.playlistUrls.first()) {
+            val sources = urls.first().distinct()
+            lastSuccessful.keys.retainAll(sources.toSet())
+            for (url in sources) {
                 try {
                     val body = withContext(Dispatchers.IO) {
                         client.newCall(Request.Builder().url(url).build()).execute().use { resp ->
@@ -52,10 +58,13 @@ class PlaylistRepository(private val settings: SettingsRepository) {
                             resp.body?.string() ?: error("пустой ответ")
                         }
                     }
-                    result += json.decodeFromString<Playlist>(body)
+                    val playlist = json.decodeFromString<Playlist>(body)
+                    lastSuccessful[url] = playlist
+                    result += playlist
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
+                    lastSuccessful[url]?.let { result += it }
                     problems += "$url — ${e.message ?: "ошибка загрузки"}"
                 }
             }
