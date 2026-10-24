@@ -31,6 +31,8 @@ class TorrServeRepository(
 
     private suspend fun baseUrl(): String = serverUrl.first().trim().trimEnd('/')
 
+    suspend fun isLocalStream(url: String): Boolean = isLocalTorrentStream(url, baseUrl())
+
     suspend fun echo(): String? = try {
         client.newCall(Request.Builder().url("${baseUrl()}/echo").build()).awaitParsed { r ->
             if (r.isSuccessful) r.body?.string()?.trim() else null

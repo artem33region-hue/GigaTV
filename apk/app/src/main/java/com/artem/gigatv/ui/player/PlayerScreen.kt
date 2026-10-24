@@ -8,6 +8,8 @@ import android.view.Gravity
 import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -16,9 +18,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -53,10 +58,15 @@ import androidx.media3.ui.PlayerView
 import androidx.tv.material3.Text
 import com.artem.gigatv.APP_USER_AGENT
 import com.artem.gigatv.appContainer
+import com.artem.gigatv.data.torrserve.ensureTorrServe
+import com.artem.gigatv.ui.components.AppButton
 import com.artem.gigatv.data.remote.RemoteSession
 import kotlin.math.min
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
 
 @OptIn(UnstableApi::class)
 @Composable
@@ -68,6 +78,16 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
     var tracks by remember { mutableStateOf(Tracks.EMPTY) }
     var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var playerView by remember { mutableStateOf<PlayerView?>(null) }
+    var localStream by remember(url) { mutableStateOf(false) }
+    var preparing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val retryFocus = remember { FocusRequester() }
+    LaunchedEffect(error) {
+        if (error != null) {
+            androidx.compose.runtime.withFrameNanos { }
+            retryFocus.requestFocus()
+        }
+    }
     LaunchedEffect(showSettings, playerView) {
         if (!showSettings) playerView?.requestFocus()
     }
@@ -135,7 +155,11 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                     }
 
                     override fun onPlayerError(e: PlaybackException) {
-                        error = "Ошибка воспроизведения: ${e.errorCodeName}"
+                        error = if (localStream && e.errorCode in setOf(
+                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                            PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT)) {
+                            "Нет соединения с TorrServe. Повторите попытку — локальный сервер будет запущен заново."
+                        } else "Ошибка воспроизведения: ${e.errorCodeName}"
                         // Текст на экране живёт до выхода из плеера и никуда не
                         // попадает; в журнале он остаётся с временем и позицией.
                         container.diag.note(
@@ -147,7 +171,6 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                         tracks = newTracks
                     }
                 })
-                prepare()
                 playWhenReady = true
             }
     }
@@ -208,10 +231,60 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
         }
     }
 
-    // Продолжить с сохранённой позиции.
+    fun launchTorrServe(): Boolean {
+        val intent = context.packageManager.getLaunchIntentForPackage("ru.yourok.torrserve") ?: return false
+        return runCatching { context.startActivity(intent); true }.getOrDefault(false)
+    }
+
+    suspend fun preparePlayback(position: Long) {
+        if (preparing) return
+        preparing = true
+        error = null
+        try {
+            exoPlayer.seekTo(position.coerceAtLeast(0))
+            localStream = container.torrserve.isLocalStream(url)
+            val ready = ensureTorrServe(localStream,
+                probe = { withTimeoutOrNull(2_000) { container.torrserve.echo() } != null },
+                launch = { launchTorrServe() },
+                onServerStarted = {
+                    android.widget.Toast.makeText(context,
+                        "TorrServe запущен. Нажмите «Назад», чтобы продолжить фильм.",
+                        android.widget.Toast.LENGTH_LONG).show()
+                })
+            if (!ready) {
+                error = "TorrServe не запущен или не отвечает. Запустите сервер и повторите попытку."
+                return
+            }
+            // TorrServe owns a separate task. Do not play behind its window or bypass
+            // Android's background-activity restrictions; resume after the user returns.
+            lifecycleOwner.lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.STARTED) }
+            exoPlayer.prepare()
+            exoPlayer.playWhenReady = true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = "Не удалось возобновить просмотр. Проверьте источник видео и повторите попытку."
+            container.diag.note("не удалось подготовить воспроизведение: ${e.javaClass.simpleName}")
+        } finally {
+            preparing = false
+        }
+    }
+
+    // Set the saved position before preparing, including a freshly restarted TorrServe.
     LaunchedEffect(url) {
         val saved = container.history.positionFor(url)
-        if (saved > 0) exoPlayer.seekTo(saved)
+        preparePlayback(saved)
+    }
+
+    DisposableEffect(lifecycleOwner, url) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_START && error != null && localStream && !preparing) {
+                val position = exoPlayer.currentPosition
+                scope.launch { preparePlayback(position) }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // Периодически сохраняем прогресс во время воспроизведения.
@@ -270,8 +343,8 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
                     findViewById<android.view.View>(androidx.media3.ui.R.id.exo_audio_track)
                         ?.setOnClickListener { showSettings = true }
                     setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
-                        if (visibility != android.view.View.VISIBLE && !showSettings) {
-                            post { if (!showSettings) requestFocus() }
+                        if (visibility != android.view.View.VISIBLE && !showSettings && error == null) {
+                            post { if (!showSettings && error == null) requestFocus() }
                         }
                     })
                     // Keep the exit action in the native controller so D-pad focus
@@ -340,14 +413,22 @@ fun PlayerScreen(url: String, title: String, poster: String? = null, onBack: () 
         }
 
         error?.let {
-            Text(
-                text = it,
-                color = Color.White,
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
                     .align(Alignment.Center)
                     .background(Color(0xCC000000))
                     .padding(24.dp)
-            )
+            ) {
+                Text(it, color = Color.White)
+                AppButton(onClick = {
+                    val position = exoPlayer.currentPosition
+                    scope.launch { preparePlayback(position) }
+                }, enabled = !preparing, modifier = Modifier.focusRequester(retryFocus)) { Text("Повторить") }
+                if (localStream) {
+                    AppButton(onClick = { launchTorrServe() }) { Text("Открыть TorrServe") }
+                }
+            }
         }
     }
 }

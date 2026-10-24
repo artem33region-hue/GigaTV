@@ -18,6 +18,7 @@
         вместо QUERY_ALL_PACKAGES: нам нужны только обработчики видео.
     -->
     <queries>
+        <package android:name="ru.yourok.torrserve" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="video/*" />

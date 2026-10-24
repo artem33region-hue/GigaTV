@@ -27,8 +27,8 @@ android {
         applicationId = "com.artem.gigatv"
         minSdk = 24
         targetSdk = 34
-        versionCode = 18
-        versionName = "0.4.13"
+        versionCode = 19
+        versionName = "0.4.14"
         buildConfigField("String", "TMDB_API_KEY", "\"$tmdbApiKey\"")
         buildConfigField("String", "DEFAULT_UPDATE_URL", "\"$defaultUpdateUrl\"")
     }
